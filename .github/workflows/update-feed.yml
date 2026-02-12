@@ -12,7 +12,8 @@ on:
   push:
     branches:
       - main
-  # IMPORTANT: Grant write permissions to the workflow
+      
+  # Grant write permissions to the workflow
   permissions:
     contents: write
 
