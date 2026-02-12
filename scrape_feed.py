@@ -109,7 +109,7 @@ def generate_rss_feed(articles, output_file='mercer_feed.xml'):
     channel = ET.SubElement(rss, 'channel')
     
     # Channel metadata
-    ET.SubElement(channel, 'title').text = 'Mercer HR View Content'
+    ET.SubElement(channel, 'title').text = 'Mercer TAAP Blog Posts'
     ET.SubElement(channel, 'link').text = BASE_URL
     ET.SubElement(channel, 'description').text = 'Latest HR articles, alerts, and legislative updates from Mercer'
     ET.SubElement(channel, 'language').text = 'en-us'
@@ -120,7 +120,8 @@ def generate_rss_feed(articles, output_file='mercer_feed.xml'):
         item = ET.SubElement(channel, 'item')
         ET.SubElement(item, 'title').text = article['title']
         ET.SubElement(item, 'link').text = article['link']
-        ET.SubElement(item, 'description').text = article['description']
+        description_with_link = f"{article['description']}<br/><br/><a href=\"{article['link']}\">Read full article</a>"
+        ET.SubElement(item, 'description').text = description_with_link
         ET.SubElement(item, 'guid', isPermaLink='true').text = article['link']
         ET.SubElement(item, 'pubDate').text = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
     
