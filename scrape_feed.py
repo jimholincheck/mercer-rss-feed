@@ -182,7 +182,8 @@ def generate_rss_feed(articles, output_file='mercer_feed.xml'):
         xml_lines.append('    <item>')
         xml_lines.append(f'      <title>{escape_xml(article["title"])}</title>')
         xml_lines.append(f'      <link>{escape_xml(article["link"])}</link>')
-        xml_lines.append(f'      <description><![CDATA[{escape_xml(article["description"])}]]></description>')
+        # Don't escape content inside CDATA - CDATA handles special chars
+        xml_lines.append(f'      <description><![CDATA[{article["description"]}]]></description>')
         xml_lines.append(f'      <guid isPermaLink="true">{escape_xml(article["link"])}</guid>')
         xml_lines.append(f'      <pubDate>{article["pubDate"]}</pubDate>')
         xml_lines.append('    </item>')
