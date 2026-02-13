@@ -8,7 +8,6 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
-import xml.etree.ElementTree as ET
 
 # Configuration
 BASE_URL = "https://taap.mercer.com/en-us/resources/hr-view-content/"
@@ -56,6 +55,13 @@ def scrape_articles(max_pages=MAX_PAGES):
                 if article_url.startswith('/'):
                     article_url = f"https://taap.mercer.com{article_url}"
                 
+                # Ensure URL has proper protocol
+                if not article_url.startswith('http'):
+                    article_url = f"https://taap.mercer.com{article_url}"
+                
+                # Clean up any potential issues (remove fragments, extra slashes)
+                article_url = article_url.strip()
+                
                 # Skip duplicates
                 if article_url in seen_links:
                     continue
@@ -96,39 +102,55 @@ def scrape_articles(max_pages=MAX_PAGES):
     print(f"\nTotal articles scraped: {len(articles)}")
     return articles
 
+def escape_xml(text):
+    """Escape special XML characters"""
+    if not text:
+        return ""
+    return (text.replace('&', '&amp;')
+                .replace('<', '&lt;')
+                .replace('>', '&gt;')
+                .replace('"', '&quot;')
+                .replace("'", '&apos;'))
+
 def generate_rss_feed(articles, output_file='mercer_feed.xml'):
     """
-    Generate RSS 2.0 XML feed from articles.
+    Generate RSS 2.0 XML feed from articles with HTML support in descriptions.
     
     Args:
         articles: List of article dictionaries
         output_file: Output filename for RSS feed
     """
-    # Create RSS root element
-    rss = ET.Element('rss', version='2.0')
-    channel = ET.SubElement(rss, 'channel')
     
-    # Channel metadata
-    ET.SubElement(channel, 'title').text = 'Mercer TAAP Blog Posts'
-    ET.SubElement(channel, 'link').text = BASE_URL
-    ET.SubElement(channel, 'description').text = 'Latest HR articles, alerts, and legislative updates from Mercer'
-    ET.SubElement(channel, 'language').text = 'en-us'
-    ET.SubElement(channel, 'lastBuildDate').text = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+    # Build RSS feed manually to support CDATA for HTML content
+    xml_lines = ['<?xml version="1.0" encoding="UTF-8"?>']
+    xml_lines.append('<rss version="2.0">')
+    xml_lines.append('  <channel>')
+    xml_lines.append(f'    <title>Mercer TAAP Blog</title>')
+    xml_lines.append(f'    <link>{BASE_URL}</link>')
+    xml_lines.append(f'    <description>Latest HR articles, alerts, and legislative updates from Mercer TAAP</description>')
+    xml_lines.append(f'    <language>en-us</language>')
+    xml_lines.append(f'    <lastBuildDate>{datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")}</lastBuildDate>')
     
     # Add articles as items
     for article in articles:
-        item = ET.SubElement(channel, 'item')
-        ET.SubElement(item, 'title').text = article['title']
-        ET.SubElement(item, 'link').text = article['link']
-        description_with_link = f"{article['description']}<br/><br/><a href=\"{article['link']}\">Read full article</a>"
-        ET.SubElement(item, 'description').text = description_with_link
-        ET.SubElement(item, 'guid', isPermaLink='true').text = article['link']
-        ET.SubElement(item, 'pubDate').text = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+        xml_lines.append('    <item>')
+        xml_lines.append(f'      <title>{escape_xml(article["title"])}</title>')
+        xml_lines.append(f'      <link>{escape_xml(article["link"])}</link>')
+        
+        # Use CDATA for description to allow HTML content
+        desc_html = f'{escape_xml(article["description"])}<br/><br/><a href="{escape_xml(article["link"])}">Read full article →</a>'
+        xml_lines.append(f'      <description><![CDATA[{desc_html}]]></description>')
+        
+        xml_lines.append(f'      <guid isPermaLink="true">{escape_xml(article["link"])}</guid>')
+        xml_lines.append(f'      <pubDate>{datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")}</pubDate>')
+        xml_lines.append('    </item>')
     
-    # Create tree and write to file
-    tree = ET.ElementTree(rss)
-    ET.indent(tree, space='  ')  # Pretty print
-    tree.write(output_file, encoding='utf-8', xml_declaration=True)
+    xml_lines.append('  </channel>')
+    xml_lines.append('</rss>')
+    
+    # Write to file
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(xml_lines))
     
     print(f"\nRSS feed generated: {output_file}")
     print(f"Total items in feed: {len(articles)}")
