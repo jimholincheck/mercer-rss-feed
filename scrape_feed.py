@@ -138,7 +138,7 @@ def generate_rss_feed(articles, output_file='mercer_feed.xml'):
         xml_lines.append(f'      <link>{escape_xml(article["link"])}</link>')
         
         # Use CDATA for description to allow HTML content
-        desc_html = f'{escape_xml(article["description"])}<br/><br/><a href="{escape_xml(article["link"])}">Read full article →</a>'
+        desc_html = f'{escape_xml(article["description"])}'
         xml_lines.append(f'      <description><![CDATA[{desc_html}]]></description>')
         
         xml_lines.append(f'      <guid isPermaLink="true">{escape_xml(article["link"])}</guid>')
