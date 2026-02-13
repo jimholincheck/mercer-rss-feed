@@ -12,7 +12,10 @@ on:
   push:
     branches:
       - main
-      
+
+permissions:
+  contents: write
+
 jobs:
   update-feed:
     runs-on: ubuntu-latest
@@ -38,6 +41,5 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "GitHub Actions Bot"
-          git add mercer_feed.xml
+          git add mercer_feed.xml article_dates.json
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update RSS feed - $(date -u +'%Y-%m-%d %H:%M:%S UTC')" && git push)
-
