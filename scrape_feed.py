@@ -2,17 +2,40 @@
 """
 Mercer HR Content RSS Feed Scraper
 Scrapes articles from Mercer's HR View Content page and generates an RSS feed.
+Preserves original discovery dates for articles.
 """
 
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
+import json
+import os
 
 # Configuration
 BASE_URL = "https://taap.mercer.com/en-us/resources/hr-view-content/"
 MAX_PAGES = 3  # Scrape first 3 pages (30 most recent articles)
 DELAY_SECONDS = 1  # Delay between page requests
+DATES_FILE = 'article_dates.json'  # Store article discovery dates
+
+def load_article_dates():
+    """Load previously saved article dates from JSON file."""
+    if os.path.exists(DATES_FILE):
+        try:
+            with open(DATES_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load dates file: {e}")
+            return {}
+    return {}
+
+def save_article_dates(dates_dict):
+    """Save article dates to JSON file."""
+    try:
+        with open(DATES_FILE, 'w') as f:
+            json.dump(dates_dict, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save dates file: {e}")
 
 def scrape_articles(max_pages=MAX_PAGES):
     """
@@ -22,12 +45,18 @@ def scrape_articles(max_pages=MAX_PAGES):
         max_pages: Number of pages to scrape (default: 3)
     
     Returns:
-        List of article dictionaries with title, link, and description
+        List of article dictionaries with title, link, description, and pubDate
     """
     articles = []
     seen_links = set()
     
+    # Load existing article dates
+    article_dates = load_article_dates()
+    current_time = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+    dates_updated = False
+    
     print(f"Starting scrape of {max_pages} pages...")
+    print(f"Loaded {len(article_dates)} existing article dates")
     
     for page_num in range(1, max_pages + 1):
         # Construct URL for pagination
@@ -59,7 +88,7 @@ def scrape_articles(max_pages=MAX_PAGES):
                 if not article_url.startswith('http'):
                     article_url = f"https://taap.mercer.com{article_url}"
                 
-                # Clean up any potential issues (remove fragments, extra slashes)
+                # Clean up any potential issues
                 article_url = article_url.strip()
                 
                 # Skip duplicates
@@ -71,7 +100,7 @@ def scrape_articles(max_pages=MAX_PAGES):
                 # Extract title (link text)
                 title = link.get_text(strip=True)
                 
-                # Try to find description (usually in nearby paragraph or div)
+                # Try to find description
                 description = ""
                 parent = link.find_parent()
                 if parent:
@@ -82,22 +111,39 @@ def scrape_articles(max_pages=MAX_PAGES):
                 if not description:
                     description = title  # Fallback to title
                 
+                # Check if we've seen this article before
+                if article_url in article_dates:
+                    # Use existing date
+                    pub_date = article_dates[article_url]
+                else:
+                    # New article - use current time and save it
+                    pub_date = current_time
+                    article_dates[article_url] = pub_date
+                    dates_updated = True
+                    print(f"  NEW article discovered: {title[:50]}...")
+                
                 articles.append({
                     'title': title,
                     'link': article_url,
-                    'description': description
+                    'description': description,
+                    'pubDate': pub_date
                 })
                 page_count += 1
             
             print(f"  Found {page_count} articles on page {page_num}")
             
-            # Rate limiting - be respectful to the server
+            # Rate limiting
             if page_num < max_pages:
                 time.sleep(DELAY_SECONDS)
                 
         except requests.RequestException as e:
             print(f"Error scraping page {page_num}: {e}")
             continue
+    
+    # Save updated dates if we found new articles
+    if dates_updated:
+        save_article_dates(article_dates)
+        print(f"\nSaved updated article dates ({len(article_dates)} total)")
     
     print(f"\nTotal articles scraped: {len(articles)}")
     return articles
@@ -114,7 +160,7 @@ def escape_xml(text):
 
 def generate_rss_feed(articles, output_file='mercer_feed.xml'):
     """
-    Generate RSS 2.0 XML feed from articles with HTML support in descriptions.
+    Generate RSS 2.0 XML feed from articles with preserved publication dates.
     
     Args:
         articles: List of article dictionaries
@@ -136,13 +182,9 @@ def generate_rss_feed(articles, output_file='mercer_feed.xml'):
         xml_lines.append('    <item>')
         xml_lines.append(f'      <title>{escape_xml(article["title"])}</title>')
         xml_lines.append(f'      <link>{escape_xml(article["link"])}</link>')
-        
-        # Use CDATA for description to allow HTML content
-        desc_html = f'{escape_xml(article["description"])}'
-        xml_lines.append(f'      <description><![CDATA[{desc_html}]]></description>')
-        
+        xml_lines.append(f'      <description><![CDATA[{escape_xml(article["description"])}]]></description>')
         xml_lines.append(f'      <guid isPermaLink="true">{escape_xml(article["link"])}</guid>')
-        xml_lines.append(f'      <pubDate>{datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")}</pubDate>')
+        xml_lines.append(f'      <pubDate>{article["pubDate"]}</pubDate>')
         xml_lines.append('    </item>')
     
     xml_lines.append('  </channel>')
